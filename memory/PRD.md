@@ -95,3 +95,4 @@ Module premium dédié inspiré Pregnancy+ (Philips) adapté contexte ivoirien.
 - Backend `_month_diff` : calcul de l’âge sur la partie date (corrige l’âge = 0 pour les dates ISO avec heure/fuseau).
 - Frontend `croissance/[id].tsx` : axe X adaptatif (6/12/24/36/60 mois), axe Y à pas « ronds », bandes P3–P97 et P15–P85, largeur mesurée via onLayout, ligne reliant les points du bébé, titres d’axes.
 - Carnet enfant (`enfants/[id]/carnet.tsx`) : la mini-courbe récupère désormais les mesures via `/croissance-oms` (la liste `/enfants` exclut les mesures → affichait « Pas encore de mesures »).
+- Android : versionCode 1081, version 1.0.1, targetSdk/compileSdk 36, minSdk 24, ABIs armeabi-v7a/arm64-v8a/x86/x86_64 (plugin with-android-abis.js), eas.json appVersionSource=local.
