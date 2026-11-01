@@ -97,3 +97,4 @@ Module premium dédié inspiré Pregnancy+ (Philips) adapté contexte ivoirien.
 - Carnet enfant (`enfants/[id]/carnet.tsx`) : la mini-courbe récupère désormais les mesures via `/croissance-oms` (la liste `/enfants` exclut les mesures → affichait « Pas encore de mesures »).
 - Android : versionCode 1081, version 1.0.1, targetSdk/compileSdk 36, minSdk 24, ABIs armeabi-v7a/arm64-v8a/x86/x86_64 (plugin with-android-abis.js), eas.json appVersionSource=local.
 - Espace Maman & droits (router espace_maman.py) : restrictions (blocage global + rubriques, appliquées à /pro/dossier, FHIR, carnet, PDF), accès d’urgence motivé, profil santé, inventaire/export, corrections traitées par le pro, résumé de parcours PDF + liens expirants révocables, notifications d’accès. Écrans : app/espace-maman/*, app/pro/corrections.tsx.
+- Android : versionCode 1082, version 1.0.62 (Play : dernière active 1080 / 1.0.61 ; un AAB 1073 a été refusé).

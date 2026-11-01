@@ -2,7 +2,7 @@
   "expo": {
     "name": "À lo Maman",
     "slug": "alomaman",
-    "version": "1.0.1",
+    "version": "1.0.62",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "alomaman",
@@ -21,7 +21,7 @@
     },
     "android": {
       "package": "com.alomaman",
-      "versionCode": 1081,
+      "versionCode": 1082,
       "softwareKeyboardLayoutMode": "pan",
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
