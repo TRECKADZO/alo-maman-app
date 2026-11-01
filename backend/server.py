@@ -2669,11 +2669,19 @@ def _ts(iso_str: str) -> float:
 
 
 @api.get("/pro/dossier/{patient_id}")
-async def pro_dossier(patient_id: str, user=Depends(require_roles("professionnel"))):
-    """Dossier patient complet pour un professionnel ayant eu au moins un RDV."""
+async def pro_dossier(patient_id: str, urgence: bool = False, motif: Optional[str] = None,
+                      user=Depends(require_roles("professionnel"))):
+    """Dossier patient complet pour un professionnel ayant eu au moins un RDV.
+    Si la maman a bloqué tous les pros, seul un accès d'urgence motivé (« bris de glace ») est possible."""
     has_rdv = await db.rdv.count_documents({"pro_id": user["id"], "maman_id": patient_id})
     if has_rdv == 0:
         raise HTTPException(status_code=403, detail="Accès refusé à ce patient")
+    from routers.espace_maman import is_pro_blocked, apply_restrictions_to_dossier
+    blocked = await is_pro_blocked(patient_id)
+    if blocked and not (urgence and motif and len(motif.strip()) >= 10):
+        raise HTTPException(status_code=423, detail="La patiente a restreint l'accès à son dossier. Accès d'urgence possible avec un motif (10 caractères min.).")
+    await _audit_log(user=user, action="read", resource_type="Patient.dossier", resource_id=patient_id,
+                     details={"urgence": True, "motif": motif.strip()[:300]} if blocked else None)
     patient = await db.users.find_one({"id": patient_id}, {"_id": 0, "password_hash": 0})
     if not patient:
         raise HTTPException(status_code=404, detail="Patient introuvable")
@@ -2682,13 +2690,14 @@ async def pro_dossier(patient_id: str, user=Depends(require_roles("professionnel
     rdvs = await db.rdv.find({"maman_id": patient_id, "pro_id": user["id"]}, {"_id": 0}).sort("date", -1).to_list(100)
     notes_raw = await db.consultation_notes.find({"patient_id": patient_id, "pro_id": user["id"]}, {"_id": 0}).sort("date", -1).to_list(200)
     notes = [decrypt_consultation_note(n) for n in notes_raw]
-    return {
+    return await apply_restrictions_to_dossier(patient_id, {
         "patient": patient,
         "grossesse": gross,
         "enfants": enfants,
         "rdvs": rdvs,
         "notes": notes,
-    }
+        "acces_urgence": blocked,
+    })
 
 
 class ConsultationNoteIn(BaseModel):
@@ -5806,6 +5815,9 @@ async def _check_pro_access_to_enfant(pro_user: dict, enfant: dict) -> bool:
     maman_id = enfant.get("user_id")
     if not maman_id:
         return False
+    from routers.espace_maman import is_pro_blocked
+    if await is_pro_blocked(maman_id):
+        return False
     rdv = await db.rdv.find_one({"pro_id": pro_user["id"], "maman_id": maman_id})
     if rdv:
         return True
@@ -5831,6 +5843,9 @@ async def _audit_log(*, user: dict, action: str, resource_type: str, resource_id
             "details": details or {},
             "timestamp": datetime.now(timezone.utc).isoformat(),
         })
+        if user.get("role") == "professionnel" and action == "read":
+            from routers.espace_maman import notify_pro_access
+            await notify_pro_access(user, resource_id, urgence=bool((details or {}).get("urgence")))
     except Exception:
         pass  # ne jamais casser un flux fonctionnel pour un audit
 
@@ -5843,6 +5858,9 @@ async def fhir_get_patient(patient_id: str, user=Depends(get_current_user)):
     if u and u.get("role") == "maman":
         if user["role"] not in ("admin",) and user["id"] != patient_id:
             # Pro doit avoir un RDV ou un consent
+            from routers.espace_maman import is_pro_blocked
+            if user.get("role") == "professionnel" and await is_pro_blocked(patient_id):
+                raise HTTPException(403, "La patiente a restreint l'accès à son dossier")
             if user.get("role") == "professionnel":
                 rdv = await db.rdv.find_one({"pro_id": user["id"], "maman_id": patient_id})
                 if not rdv:
@@ -5860,6 +5878,8 @@ async def fhir_get_patient(patient_id: str, user=Depends(get_current_user)):
             ok = await _check_pro_access_to_enfant(user, e)
             if not ok:
                 raise HTTPException(403, "Accès refusé (pas de RDV ni consent)")
+            from routers.espace_maman import strip_enfant_for_pro
+            e = await strip_enfant_for_pro(e)
         await _audit_log(user=user, action="read", resource_type="Patient", resource_id=patient_id)
         return to_fhir_patient_enfant(e)
 
@@ -5878,6 +5898,8 @@ async def fhir_list_immunizations(subject: str, user=Depends(get_current_user)):
         ok = await _check_pro_access_to_enfant(user, e)
         if not ok:
             raise HTTPException(403, "Accès refusé")
+        from routers.espace_maman import strip_enfant_for_pro
+        e = await strip_enfant_for_pro(e)
     items = [to_fhir_immunization(v, subject) for v in (e.get("vaccins") or [])]
     await _audit_log(user=user, action="read", resource_type="Immunization", resource_id=subject)
     return to_fhir_bundle(resources=items, bundle_type="searchset")
@@ -5902,6 +5924,8 @@ async def fhir_list_observations(
         ok = await _check_pro_access_to_enfant(user, e)
         if not ok:
             raise HTTPException(403, "Accès refusé")
+        from routers.espace_maman import strip_enfant_for_pro
+        e = await strip_enfant_for_pro(e)
 
     obs: list[dict] = []
     for m in (e.get("mesures") or []):
@@ -5942,6 +5966,8 @@ async def fhir_carnet_composition(enfant_id: str, user=Depends(get_current_user)
         ok = await _check_pro_access_to_enfant(user, e)
         if not ok:
             raise HTTPException(403, "Accès refusé")
+        from routers.espace_maman import strip_enfant_for_pro
+        e = await strip_enfant_for_pro(e)
 
     maman = await db.users.find_one({"id": e["user_id"]}, {"_id": 0}) or {}
     immunizations = [to_fhir_immunization(v, enfant_id) for v in (e.get("vaccins") or [])]
@@ -5997,6 +6023,8 @@ async def fhir_everything(enfant_id: str, user=Depends(get_current_user)):
         ok = await _check_pro_access_to_enfant(user, e)
         if not ok:
             raise HTTPException(403, "Accès refusé")
+        from routers.espace_maman import strip_enfant_for_pro
+        e = await strip_enfant_for_pro(e)
 
     maman = await db.users.find_one({"id": e["user_id"]}, {"_id": 0}) or {}
 
@@ -6050,6 +6078,8 @@ async def carnet_module(enfant_id: str, module: str, user=Depends(get_current_us
         ok = await _check_pro_access_to_enfant(user, e)
         if not ok:
             raise HTTPException(403, "Accès refusé")
+        from routers.espace_maman import strip_enfant_for_pro
+        e = await strip_enfant_for_pro(e)
 
     # Calcul âge en mois
     try:
@@ -6248,6 +6278,9 @@ async def consent_delete(cid: str, user=Depends(require_roles("maman"))):
 
 async def _has_consent_for(pro_id: str, maman_id: str, category: str) -> bool:
     """Vérifie qu'un consent actif et non expiré existe pour la catégorie demandée."""
+    from routers.espace_maman import is_category_hidden
+    if await is_category_hidden(maman_id, category):
+        return False
     c = await db.consents.find_one({
         "maman_id": maman_id,
         "pro_id": pro_id,
@@ -6738,6 +6771,8 @@ async def carnet_export_pdf(enfant_id: str, user=Depends(get_current_user)):
         ok = await _check_pro_access_to_enfant(user, e)
         if not ok:
             raise HTTPException(403, "Accès refusé")
+        from routers.espace_maman import strip_enfant_for_pro
+        e = await strip_enfant_for_pro(e)
 
     maman = await db.users.find_one({"id": e["user_id"]}, {"_id": 0}) or {}
 
@@ -9771,6 +9806,16 @@ async def pro_get_patient_carnet(patient_id: str, request: Request, user=Depends
     # via_parent : ID de la maman quand on consulte un enfant via le token de la maman
     via_parent = request.query_params.get("via_parent")
     demande = await _verify_access_token(user["id"], patient_id, token, allow_child_of=via_parent)
+
+    # 🔒 Restriction maman (blocage global de tous les pros)
+    from routers.espace_maman import is_pro_blocked
+    _owner_id = via_parent or patient_id
+    if demande.get("patient_type") == "enfant" and not via_parent:
+        _e = await db.enfants.find_one({"id": patient_id}, {"_id": 0, "user_id": 1})
+        _owner_id = (_e or {}).get("user_id") or patient_id
+    if await is_pro_blocked(_owner_id):
+        raise HTTPException(403, "La patiente a temporairement restreint l'accès à son dossier.")
+    await _audit_log(user=user, action="read", resource_type="Carnet.partage", resource_id=_owner_id)
 
     # Audit log
     try:
@@ -13795,6 +13840,8 @@ try:
     register_pro_claim_routes(app, api, db, get_current_user, require_roles)
     register_analytics_routes(app, api, db, require_roles)
     register_pharmacies_garde_routes(app, api, db, get_current_user, require_roles)
+    from routers.espace_maman import register_espace_maman_routes
+    register_espace_maman_routes(app, api, db, get_current_user, require_roles, _audit_log)
     app.include_router(api)  # re-enregistre pour prendre en compte les routes ajoutées
     logger.info("✅ Routers modulaires chargés : pdf_reports, subscriptions, etablissements, pro_claims, analytics, pharmacies_garde")
 except Exception as _e:

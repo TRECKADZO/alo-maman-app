@@ -30,13 +30,23 @@ export default function DossierPatient() {
     return { title: "", due_at: local, notes: "" };
   });
 
-  const load = async () => {
+  const [blockedMsg, setBlockedMsg] = useState<string | null>(null);
+  const [motif, setMotif] = useState("");
+
+  const load = async (urgenceMotif: string | undefined = data?.acces_urgence ? motif.trim() : undefined) => {
     try {
-      const { data } = await api.get(`/pro/dossier/${id}`);
+      const { data } = await api.get(`/pro/dossier/${id}`, {
+        params: urgenceMotif ? { urgence: true, motif: urgenceMotif } : undefined,
+      });
       setData(data);
-    } catch (e) {
-      Alert.alert("Accès refusé", formatError(e));
-      router.back();
+      setBlockedMsg(null);
+    } catch (e: any) {
+      if (e?.response?.status === 423) {
+        setBlockedMsg(formatError(e));
+      } else {
+        Alert.alert("Accès refusé", formatError(e));
+        router.back();
+      }
     } finally { setLoading(false); }
   };
   useFocusEffect(useCallback(() => { load(); }, [id]));
@@ -140,6 +150,37 @@ export default function DossierPatient() {
     ]);
   };
 
+  if (blockedMsg && !data) {
+    return (
+      <SafeAreaView style={[styles.loading, { padding: SPACING.xl }]}>
+        <Ionicons name="lock-closed" size={48} color={COLORS.error} />
+        <Text style={{ fontSize: 18, fontWeight: "800", color: COLORS.textPrimary, marginTop: 12, textAlign: "center" }}>Dossier restreint par la patiente</Text>
+        <Text style={{ fontSize: 13, color: COLORS.textSecondary, marginTop: 8, textAlign: "center" }}>
+          En cas d'urgence médicale uniquement, vous pouvez y accéder en indiquant un motif. La patiente sera immédiatement prévenue et l'accès sera tracé.
+        </Text>
+        <TextInput
+          value={motif}
+          onChangeText={setMotif}
+          placeholder="Motif de l'urgence (10 caractères min.)"
+          placeholderTextColor={COLORS.textMuted}
+          multiline
+          style={{ alignSelf: "stretch", minHeight: 80, marginTop: 16, padding: 12, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, backgroundColor: COLORS.surface, color: COLORS.textPrimary, textAlignVertical: "top" }}
+          testID="urgence-motif"
+        />
+        <TouchableOpacity
+          disabled={motif.trim().length < 10}
+          onPress={() => { setLoading(true); load(motif.trim()); }}
+          style={{ alignSelf: "stretch", marginTop: 12, paddingVertical: 14, borderRadius: 999, alignItems: "center", backgroundColor: COLORS.error, opacity: motif.trim().length < 10 ? 0.5 : 1 }}
+          testID="urgence-acceder"
+        >
+          <Text style={{ color: "#fff", fontWeight: "800" }}>🚨 Accès d'urgence</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => router.back()} style={{ marginTop: 14, padding: 10 }}>
+          <Text style={{ color: COLORS.textSecondary, fontWeight: "700" }}>Retour</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
   if (loading || !data) return <SafeAreaView style={styles.loading}><ActivityIndicator color={COLORS.primary} /></SafeAreaView>;
 
   const { patient, grossesse, enfants, rdvs, notes } = data;
@@ -185,6 +226,18 @@ export default function DossierPatient() {
       </ScrollView>
 
       <ScrollView contentContainerStyle={{ padding: SPACING.lg, paddingBottom: 100 }}>
+        {data.acces_urgence ? (
+          <View style={styles.restrBanner} testID="banner-urgence">
+            <Ionicons name="warning" size={16} color={COLORS.error} />
+            <Text style={styles.restrText}>Accès d&apos;urgence : la patiente a verrouillé son dossier et a été prévenue de votre consultation.</Text>
+          </View>
+        ) : null}
+        {data.restrictions_actives?.length ? (
+          <View style={styles.restrBanner} testID="banner-restrictions">
+            <Ionicons name="eye-off" size={16} color={COLORS.error} />
+            <Text style={styles.restrText}>Rubriques masquées par la patiente : {data.restrictions_actives.join(", ")}</Text>
+          </View>
+        ) : null}
         {tab === "synthese" && (
           <>
             <View style={styles.card}>
@@ -409,6 +462,8 @@ const InfoRow = ({ icon, label, value }: any) => (
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bgPrimary },
   loading: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: COLORS.bgPrimary },
+  restrBanner: { flexDirection: "row", gap: 8, alignItems: "center", padding: 10, marginBottom: 10, borderRadius: RADIUS.md, backgroundColor: "#FEF2F2", borderWidth: 1, borderColor: "#FECACA" },
+  restrText: { flex: 1, fontSize: 12, fontWeight: "700", color: "#991B1B" },
   header: { flexDirection: "row", alignItems: "center", gap: 10, padding: SPACING.lg, paddingTop: SPACING.lg },
   backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: "rgba(255,255,255,0.25)", alignItems: "center", justifyContent: "center" },
   patientAvatar: { width: 52, height: 52, borderRadius: 26, backgroundColor: "rgba(255,255,255,0.3)", alignItems: "center", justifyContent: "center", borderWidth: 2, borderColor: "rgba(255,255,255,0.5)" },

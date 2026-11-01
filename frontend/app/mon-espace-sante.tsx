@@ -36,6 +36,7 @@ const CATEGORIES: Category[] = [
     label: "Suivi médical",
     emoji: "🏥",
     tools: [
+      { id: "mes-droits", label: "Mon espace & mes droits", sub: "Accès, correction, restriction", icon: "shield-half", color: "#C85A40", path: "/espace-maman", keywords: ["rgpd", "droits", "resume", "partage", "restriction", "correction"] },
       { id: "dossier", label: "Dossier médical", sub: "Vue synthétique", icon: "document-text", color: "#14B8A6", path: "/dossier-medical" },
       { id: "mes-notes", label: "Mes notes médicales", sub: "Notes des pros", icon: "reader", color: "#06B6D4", path: "/mes-notes", keywords: ["consultation", "diagnostic"] },
       { id: "documents", label: "Documents", sub: "Analyses, ordonnances, échos", icon: "folder", color: "#0EA5E9", path: "/documents", keywords: ["pdf", "scan"] },

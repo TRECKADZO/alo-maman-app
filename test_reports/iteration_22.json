@@ -1,0 +1,57 @@
+{
+  "summary": "Espace Maman (RGPD access/rectification/restriction, resume PDF + expiring share link, access notifications) tested end-to-end. Backend: 14/14 pytest pass (restrictions incl. invalid category filtering, encrypted profil-sante, inventory/export without secrets, correction flow maman->pro with real note field update + 2nd answer 400 + notifs both sides, admin list, resume JSON/PDF, share create/public HTML+PDF/views/audit 'lien_partage'/notif/revoke->404, invalid duree 422, expired link 410, /pro/dossier 200/423/urgence 200 with audit+notif, short motif 423, hidden grossesse/vaccins, consultation notification + 1h throttle). Frontend (390x844): hub tiles, restrictions toggles (window.confirm), mes-donnees save + JSON export download, corrections creation (note + autre), pro corrections accept (note really updated) / refuse, resume PDF download, share (link copied to clipboard) + revoke, pro dossier locked screen + urgence access, audit-log new labels, entry links from /mon-espace-sante and Profil tab -> all working. Issues found: hidden_categories not enforced on FHIR/carnet endpoints (privacy gap), 'autre' corrections stored/shown with champ='diagnostic', pro dossier UI shows no indicator for restrictions_actives / acces_urgence. No deprecated Expo packages detected.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/fhir/Immunization?subject=<enfant_id>, GET /api/fhir/Observation, GET /api/enfants/{id}/carnet/export/pdf (and likely /fhir/everything, /fhir/Composition, /enfants/{id}/carnet/{module})", "issue": "Rubric masking (hidden_categories ['vaccins','croissance']) is only applied in /pro/dossier via apply_restrictions_to_dossier. A pro with an RDV still gets vaccines (total=1) and growth observations (total=5) and the full carnet PDF (200) through these endpoints. _has_consent_for() (which checks is_category_hidden) is defined at server.py:6267 but never called anywhere. Verified with tests/test_espace_maman_gaps_iter22.py.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/espace-maman/corrections", "issue": "For target_type='autre' the 'champ' field is still accepted and stored (frontend always sends champ='diagnostic'), so the request shows as 'Note médicale · diagnostic' on the pro side and '· diagnostic' on maman side. Backend should force champ=None (and target_id=None) when target_type='autre'."},
+      {"endpoint": "GET /api/espace-maman/profil-sante", "issue": "Fallback from grossesses returns groupe_sanguin='A+' (combined format stored in grossesse) with rhesus=None; the mes-donnees group buttons (A/B/AB/O) cannot highlight 'A+'. Normalize split of group/rhesus in _get_profil."},
+      {"endpoint": "GET /api/pro/dossier/{id}", "issue": "Audit entry is written before the 'Patient introuvable' 404 check (minor ordering)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "espace-maman/corrections.tsx send()", "issue": "When switching to 'Autre information', f.champ stays 'diagnostic' and is sent; card shows 'À : Dr X · diagnostic' and pro list shows 'Note médicale · diagnostic' for a non-note request.", "testID": "type-autre", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [
+      {"flow": "Pro dossier with restrictions", "issue": "pro/dossier/[id].tsx never renders restrictions_actives (pro sees empty Grossesse/Vaccins as if no data) nor an 'Accès d'urgence en cours' banner when acces_urgence=true. Add a visible banner listing masked rubrics and the emergency-access state.", "affected_testIDs": ["urgence-acceder"]}
+    ],
+    "design_issues": [
+      {"screen": "/espace-maman/resume", "issues": ["Allergies pill uses amber text on light-amber background - low contrast"]},
+      {"screen": "/audit-log", "issues": ["'login' events show raw untranslated 'login' / 'Auth' label with a plain dot icon (pre-existing)"]}
+    ],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_espace_maman_iter22.py",
+    "/app/backend/tests/test_espace_maman_gaps_iter22.py",
+    "/app/backend/tests/cleanup_espace_maman_iter22.py",
+    "/app/test_reports/pytest/pytest_espace_maman_iter22.xml"
+  ],
+  "action_items": [
+    "HIGH: enforce hidden_categories on all pro-facing child/maman data endpoints (FHIR Immunization/Observation/everything/Composition, /enfants/{id}/carnet/{module}, /enfants/{id}/carnet/export/pdf) - e.g. call is_category_hidden(maman_id, 'vaccins'|'croissance') inside _check_pro_access_to_enfant callers or filter output; remove or wire the unused _has_consent_for.",
+    "Force champ=None/target_id=None for target_type='autre' (backend) and stop sending champ from corrections.tsx when type is 'autre'.",
+    "pro/dossier/[id].tsx: display restrictions_actives banner and an emergency-access banner when acces_urgence=true.",
+    "Normalize groupe_sanguin fallback ('A+' -> groupe 'A', rhesus '+') in _get_profil.",
+    "Improve contrast of allergies pill on resume screen."
+  ],
+  "critical_code_review_comments": [
+    "_has_consent_for (server.py:6267) is dead code - category restriction is not enforced outside /pro/dossier.",
+    "lib/files.ts web download: URL.createObjectURL never revoked (minor leak); native path silently does nothing if Sharing unavailable.",
+    "Public shared resume (HTML/PDF) ignores hidden_categories - acceptable since maman shares voluntarily, but consider stating it in the UI.",
+    "No deprecated Expo packages (expo-av / expo-barcode-scanner / expo-background-fetch) found; SafeAreaView imported from react-native-safe-area-context."
+  ],
+  "updated_files": [
+    "/app/frontend/app/espace-maman/corrections.tsx (added testIDs only: corr-close, corr-note-<id>, champ-<key>, corr-pro-<id>)",
+    "/app/backend/tests/test_espace_maman_iter22.py (new)",
+    "/app/backend/tests/test_espace_maman_gaps_iter22.py (new)",
+    "/app/backend/tests/cleanup_espace_maman_iter22.py (new)"
+  ],
+  "success_rate": {"backend": "93% (14/14 requested flows pass; 1 privacy gap found on related endpoints)", "frontend": "92% (all requested flows work; 1 UI bug + 1 missing indicator)"},
+  "seed_data_creation": "Created temporary TEST_ consultation notes, corrections and share links; all removed/revoked by cleanup. Maman restrictions reset to {block_all:false, hidden_categories:[]}; all active share links revoked (incl. 2 pre-existing ones); profil_sante reset to empty lists (groupe falls back to grossesse 'A+').",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Use EXPO_PUBLIC_BACKEND_URL from frontend/.env. audit-log/me returns {total, events}. FHIR endpoints use ?subject=<enfant_id>. Notification throttle stored in access_notif_throttle (key '<pro_id>:<maman_id>' or 'share:<token>') - delete key before asserting notifications. Run tests/cleanup_espace_maman_iter22.py after tests.",
+  "rca_of_issue": "Category masking implemented only as output filter in apply_restrictions_to_dossier (pro_dossier). Other pro read paths authorize via _check_pro_access_to_enfant which checks only block_all, never hidden_categories. Repro: maman PUT restrictions hidden_categories=['vaccins'] -> pro GET /api/fhir/Immunization?subject=<enfant_id> returns vaccines."
+}

@@ -43,6 +43,7 @@ const CATEGORIES: Category[] = [
       { id: "rdv-nouveau", label: "Nouveau RDV", sub: "Créer manuellement", icon: "add-circle", color: "#10B981", path: "/rdv-nouveau" },
       { id: "consulter", label: "Consulter patient", sub: "Démarrer consultation", icon: "stethoscope", color: "#3B82F6", path: "/pro/consulter-patient", keywords: ["consultation"] },
       { id: "dossier-patient", label: "Dossier patient", sub: "Accès dossier médical", icon: "document-text", color: "#EF4444", path: "/pro/dossier-patient" },
+      { id: "corrections", label: "Demandes de correction", sub: "Rectifications patientes", icon: "create", color: "#F59E0B", path: "/pro/corrections", keywords: ["rgpd", "rectification"] },
       { id: "teleconsult", label: "Téléconsultation", sub: "Visio à distance", icon: "videocam", color: "#EC4899", path: "/pro/teleconsultation" },
     ],
   },

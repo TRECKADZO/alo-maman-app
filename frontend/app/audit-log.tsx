@@ -40,6 +40,13 @@ const RESOURCE_LABELS: Record<string, string> = {
   "Carnet.pdf": "Carnet PDF",
   "Bundle.everything": "Bundle FHIR complet",
   Consent: "Consentement",
+  "Patient.dossier": "Dossier complet",
+  "Carnet.partage": "Carnet (code de partage)",
+  "Resume.partage": "Résumé de parcours (lien)",
+  Restriction: "Restrictions d'accès",
+  Correction: "Demande de correction",
+  ProfilSante: "Informations de santé",
+  "Export.RGPD": "Export de mes données",
 };
 
 export default function AuditLog() {
@@ -151,11 +158,14 @@ export default function AuditLog() {
                         <Text style={styles.eventTime}>{time}</Text>
                       </View>
                       <Text style={styles.eventResource}>{resource}</Text>
+                      {e.details?.urgence ? (
+                        <Text style={styles.urgence}>🚨 Accès d'urgence — motif : {e.details.motif}</Text>
+                      ) : null}
                       <View style={styles.eventBy}>
                         <Ionicons name="person-circle" size={12} color={COLORS.textMuted} />
                         <Text style={styles.eventByText}>
                           {e.user_name || "—"}
-                          {e.user_role === "professionnel" ? " · Pro" : e.user_role === "maman" ? " · Vous" : ` · ${e.user_role}`}
+                          {e.user_role === "professionnel" ? " · Pro" : e.user_role === "maman" ? " · Vous" : e.user_role === "lien_partage" ? "" : ` · ${e.user_role}`}
                         </Text>
                       </View>
                     </View>
@@ -216,6 +226,7 @@ const styles = StyleSheet.create({
   eventAction: { fontSize: 13, fontWeight: "800", color: COLORS.textPrimary },
   eventTime: { fontSize: 11, color: COLORS.textMuted },
   eventResource: { fontSize: 12, color: COLORS.textSecondary, marginTop: 2 },
+  urgence: { fontSize: 11, color: COLORS.error, fontWeight: "700", marginTop: 4 },
   eventBy: { flexDirection: "row", alignItems: "center", gap: 4, marginTop: 4 },
   eventByText: { fontSize: 11, color: COLORS.textMuted },
 
