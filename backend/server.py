@@ -1405,10 +1405,11 @@ async def update_grossesse(gid: str, payload: GrossesseIn, user=Depends(require_
 # ----------------------------------------------------------------------
 @api.get("/enfants")
 async def list_enfants(user=Depends(require_roles("maman"))):
-    """Liste enfants (sans photos ni historique mesures — endpoint dédié /enfants/{id} pour détails)."""
+    """Liste enfants (sans photos). Les mesures sont incluses (légères) : la mini-courbe
+    du carnet en a besoin, y compris dans les versions déjà installées de l'app."""
     items = await db.enfants.find(
         {"user_id": user["id"]},
-        {"_id": 0, "photo": 0, "mesures": 0},  # exclure les gros champs
+        {"_id": 0, "photo": 0},
     ).to_list(100)
     # 🔐 Déchiffrer numero_cmu + allergies
     return [decrypt_enfant(e) for e in items]
