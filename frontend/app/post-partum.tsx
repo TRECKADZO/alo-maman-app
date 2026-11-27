@@ -10,6 +10,7 @@ import { api, formatError } from "../lib/api";
 import { smartPost } from "../lib/offline";
 import { COLORS, RADIUS, SPACING } from "../constants/theme";
 import DateField from "../components/DateField";
+import FeedingWeekChart from "../components/FeedingWeekChart";
 
 const SYMPTOMES = ["Tristesse", "Anxiété", "Fatigue extrême", "Insomnie", "Irritabilité", "Pleurs fréquents", "Perte d'appétit"];
 
@@ -129,6 +130,8 @@ export default function PostPartum() {
             <Text style={styles.summaryValue}>{allaitement.length}</Text>
             <Text style={styles.summaryLabel}>Tétées enregistrées</Text>
           </View>
+
+          <FeedingWeekChart items={allaitement} enfants={enfants} />
 
           <TouchableOpacity style={styles.btnAdd} onPress={() => setModalA(true)} testID="add-tete-btn">
             <Ionicons name="add-circle" size={20} color="#fff" />
